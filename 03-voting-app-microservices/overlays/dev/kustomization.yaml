@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: vote-dev
+
+# Use the 'replicas' field for cleaner scaling
+replicas:
+  - name: vote
+    count: 1
+
+# Add this to map redis to the dev environment
+configMapGenerator:
+- name: app-config
+  behavior: merge
+  literals:
+    - REDIS_HOST=redis
+    - POSTGRES_HOST=db  # same as base, no prefix in names
+
+# Add this to overlays/dev/kustomization.yaml
+patches:
+  - target:
+      kind: Ingress
+      name: voting-ingress
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: dev.vote.local
+      - op: replace
+        path: /spec/rules/1/host
+        value: dev.result.local
