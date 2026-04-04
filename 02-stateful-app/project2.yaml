@@ -1,0 +1,120 @@
+---
+# 1. The Secret: Storing our "API Key"
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+  namespace: cepsproduction
+type: Opaque
+data:
+  # 'super-secret-key-123' encoded in base64
+  API_KEY: c3VwZXItc2VjcmV0LWtleS0xMjM=
+
+---
+# 2. The ConfigMap: The Caddyfile Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caddy-config
+  namespace: cepsproduction
+data:
+  Caddyfile: |
+    :80 {
+        log {
+            output stdout
+        }
+        
+        # Health Check Endpoint
+        handle /health {
+            respond `{"status": "healthy"}` 200
+        }
+
+        # Main Page
+        handle {
+            respond "<h1>Caddy is Running in Production</h1><p>API Key Loaded: {$API_KEY}</p>" 200
+        }
+    }
+
+---
+# 3. The Deployment: 3 Replicas with Resource Management
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caddy-app
+  namespace: cepsproduction
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: caddy
+  template:
+    metadata:
+      labels:
+        app: caddy
+    spec:
+      containers:
+      - name: caddy
+        image: caddy:alpine
+        ports:
+        - containerPort: 80
+        # Injecting Secret as Env Var
+        env:
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: API_KEY
+        # Resource Management (Required for HPA to work!)
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "128Mi"
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/caddy/Caddyfile
+          subPath: Caddyfile
+      volumes:
+      - name: config-volume
+        configMap:
+          name: caddy-config
+
+---
+# 4. The Service: Exposing the App
+apiVersion: v1
+kind: Service
+metadata:
+  name: caddy-service
+  namespace: cepsproduction
+spec:
+  type: NodePort
+  selector:
+    app: caddy
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30080
+
+---
+# 5. The HPA: Auto-scaling based on CPU
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: caddy-hpa
+  namespace: cepsproduction
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: caddy-app
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
