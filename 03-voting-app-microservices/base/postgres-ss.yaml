@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+spec:
+  # This must match the name of the Service
+  serviceName: "db"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-pw
+              key: password
+        # Requirement: Worker looks for 'postgres' user by default
+        - name: POSTGRES_USER
+          value: postgres
+        ports:
+        - containerPort: 5432
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        # Tell Postgres WHERE to save data on the disk
+        volumeMounts:
+        - name: db-data
+          mountPath: /var/lib/postgresql/data
+  
+  # This is the "Stateful" part that creates the Persistent Volume
+  volumeClaimTemplates:
+  - metadata:
+      name: db-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi

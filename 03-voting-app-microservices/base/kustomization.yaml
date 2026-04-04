@@ -1,0 +1,16 @@
+resources:
+  - configMap.yaml
+  - vote-deploy.yaml
+  - result-deploy.yaml
+  - redis-deploy.yaml
+  - postgres-ss.yaml
+  - db-service.yaml
+  - worker-deploy.yaml
+  - network-policy.yaml
+  - hpa.yaml
+  - ingress.yaml
+
+secretGenerator:
+  - name: postgres-pw
+    literals:
+      - password=postgres
